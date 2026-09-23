@@ -2,40 +2,36 @@ name: Run Marwari Shorts Bot
 
 on:
   schedule:
-    - cron: '0 */4 * * *'  # Runs every 4 hours
-  workflow_dispatch:       # Allows manual trigger
+    - cron: '0 6 * * *'
+  workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
 
-      - name: Install System Dependencies (ffmpeg)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
+    - name: Set up Node.js (Provides JS Runtime for yt-dlp)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
 
-      - name: Install Python Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install --upgrade yt-dlp moviepy pydub google-api-python-client google-auth-oauthlib google-auth-httplib2 Pillow
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install --upgrade yt-dlp
+        pip install moviepy pydub schedule google-api-python-client google-auth-oauthlib google-auth-httplib2 Pillow opencv-python-headless requests numpy
 
-      - name: Create Cookies File
-        env:
-          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
-        run: |
-          python -c "import os; open('cookies.txt', 'w', encoding='utf-8').write(os.environ.get('YOUTUBE_COOKIES', ''))"
-
-      - name: Run Automation Pipeline
-        run: |
-          python main.py
+    - name: Run main script
+      env:
+        TOKEN_JSON: ${{ secrets.TOKEN_JSON }}
+        YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
+      run: |
+        python main.py
