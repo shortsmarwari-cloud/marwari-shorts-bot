@@ -2,7 +2,7 @@ name: Run Marwari Shorts Bot
 
 on:
   schedule:
-    - cron: '0 */4 * * *' # Auto-runs every 4 hours
+    - cron: '0 */4 * * *'
   workflow_dispatch:
 
 jobs:
@@ -18,7 +18,7 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Set up Node.js (Fixes yt-dlp JS Runtime)
+    - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '20'
@@ -33,6 +33,12 @@ jobs:
         python -m pip install --upgrade pip
         pip install --upgrade yt-dlp
         pip install moviepy pydub google-api-python-client google-auth-oauthlib google-auth-httplib2 Pillow opencv-python-headless requests numpy
+
+    - name: Create Cookies File
+      run: |
+        echo "$YOUTUBE_COOKIES" > cookies.txt
+      env:
+        YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
 
     - name: Run Pipeline
       env:
