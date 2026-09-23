@@ -2,7 +2,7 @@ name: Run Marwari Shorts Bot
 
 on:
   schedule:
-    - cron: '0 6 * * *'
+    - cron: '0 */4 * * *' # Auto-runs every 4 hours
   workflow_dispatch:
 
 jobs:
@@ -18,18 +18,23 @@ jobs:
       with:
         python-version: '3.11'
 
-    - name: Set up Node.js (Provides JS Runtime for yt-dlp)
+    - name: Set up Node.js (Fixes yt-dlp JS Runtime)
       uses: actions/setup-node@v4
       with:
         node-version: '20'
 
-    - name: Install dependencies
+    - name: Install System Dependencies (FFmpeg)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
+
+    - name: Install Python Dependencies
       run: |
         python -m pip install --upgrade pip
         pip install --upgrade yt-dlp
-        pip install moviepy pydub schedule google-api-python-client google-auth-oauthlib google-auth-httplib2 Pillow opencv-python-headless requests numpy
+        pip install moviepy pydub google-api-python-client google-auth-oauthlib google-auth-httplib2 Pillow opencv-python-headless requests numpy
 
-    - name: Run main script
+    - name: Run Pipeline
       env:
         TOKEN_JSON: ${{ secrets.TOKEN_JSON }}
         YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
