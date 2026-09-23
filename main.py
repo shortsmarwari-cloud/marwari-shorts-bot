@@ -33,13 +33,14 @@ def mark_as_uploaded(video_id):
         json.dump(history, f)
 
 def download_viral_marwari_video(search_query="Marwari funny comedy shorts", output_path="raw_marwari.mp4"):
-    """Downloads a viral video that hasn't been uploaded before."""
+    """Downloads a viral video that hasn't been uploaded before using cookies authentication."""
     history = get_uploaded_videos()
     print(f"Searching for viral videos (>100k views) for: {search_query}...")
     
     ydl_opts = {
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]',
         'outtmpl': output_path,
+        'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,  # Cookie authentication enabled
         # Strictly filters for viral videos under 3 minutes
         'match_filter': yt_dlp.utils.match_filter_func("view_count >= 100000 & duration <= 180"),
         'rejecttitle': '(?i)copyright', 
@@ -98,7 +99,6 @@ def build_marwari_short(input_video_path="raw_marwari.mp4", music_path="music/ba
     
     # 2. Add "Wait for it..." Text to the Hook (Engagement Booster)
     try:
-        # Note: Requires ImageMagick installed on your system/GitHub Actions
         hook_text = TextClip("Wait for it... 😂", fontsize=75, color='yellow', bg_color='black', font='Impact')
         hook_text = hook_text.set_position(('center', 'top')).set_duration(hook_clip.duration)
         hook_clip = CompositeVideoClip([hook_clip, hook_text])
