@@ -85,7 +85,7 @@ def mark_as_uploaded(video_id):
         json.dump(history, f)
 
 def download_viral_marwari_video(output_path="raw_marwari.mp4"):
-    """Downloads a viral video using android/ios player clients to bypass YouTube bot checks."""
+    """Downloads a viral video using standard yt-dlp format selection with cookies."""
     history = get_uploaded_videos()
 
     # Load cookies from env var or local file
@@ -106,26 +106,21 @@ def download_viral_marwari_video(output_path="raw_marwari.mp4"):
     search_query = random.choice(search_queries)
     print(f"🔍 Searching for viral videos (>30k views) for: '{search_query}'...")
 
-    # Player client override bypasses web bot protection
-    extractor_args = {'youtube': {'player_client': ['android', 'ios', 'web_creator']}}
-
     search_opts = {
         'extract_flat': 'in_playlist',
         'skip_download': True,
         'quiet': True,
         'ignoreerrors': True,
         'cookiefile': cookie_file,
-        'extractor_args': extractor_args,
     }
 
     dl_opts = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]',
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'outtmpl': output_path,
         'cookiefile': cookie_file,
         'noplaylist': True,
         'quiet': True,
         'ignoreerrors': True,
-        'extractor_args': extractor_args,
     }
 
     with yt_dlp.YoutubeDL(search_opts) as ydl_search:
@@ -166,7 +161,6 @@ def download_viral_marwari_video(output_path="raw_marwari.mp4"):
 
     print("❌ No new viral videos found right now.")
     return None, None
-
 def download_background_music(save_path="music/background.mp3"):
     """Downloads a clean, copyright-free background music track."""
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
