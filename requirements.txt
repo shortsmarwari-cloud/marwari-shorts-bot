@@ -1,0 +1,10 @@
+yt-dlp
+moviepy
+pydub
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2
+Pillow
+opencv-python
+requests
+numpy
