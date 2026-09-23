@@ -85,8 +85,16 @@ def mark_as_uploaded(video_id):
         json.dump(history, f)
 
 def download_viral_marwari_video(output_path="raw_marwari.mp4"):
-    """Downloads a viral video that hasn't been uploaded before using cookies authentication."""
+    """Downloads a viral video using android/ios player clients to bypass YouTube bot checks."""
     history = get_uploaded_videos()
+
+    # Load cookies from env var or local file
+    cookie_file = "cookies.txt"
+    if os.environ.get("YOUTUBE_COOKIES"):
+        with open("cookies.txt", "w", encoding="utf-8") as f:
+            f.write(os.environ["YOUTUBE_COOKIES"])
+    elif not os.path.exists(cookie_file):
+        cookie_file = None
 
     search_queries = [
         "Marwari funny comedy shorts",
@@ -98,30 +106,63 @@ def download_viral_marwari_video(output_path="raw_marwari.mp4"):
     search_query = random.choice(search_queries)
     print(f"🔍 Searching for viral videos (>30k views) for: '{search_query}'...")
 
-    ydl_opts = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]',
-        'outtmpl': output_path,
-        'cookiefile': 'cookies.txt' if os.path.exists('cookies.txt') else None,
-        # Filter for videos with at least 30,000 views and duration <= 180 seconds
-        'match_filter': yt_dlp.utils.match_filter_func("view_count >= 30000 & duration <= 180"),
-        'rejecttitle': '(?i)copyright', 
-        'noplaylist': True,
+    # Player client override bypasses web bot protection
+    extractor_args = {'youtube': {'player_client': ['android', 'ios', 'web_creator']}}
+
+    search_opts = {
+        'extract_flat': 'in_playlist',
+        'skip_download': True,
         'quiet': True,
-        'ignoreerrors': True
+        'ignoreerrors': True,
+        'cookiefile': cookie_file,
+        'extractor_args': extractor_args,
     }
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+    dl_opts = {
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]',
+        'outtmpl': output_path,
+        'cookiefile': cookie_file,
+        'noplaylist': True,
+        'quiet': True,
+        'ignoreerrors': True,
+        'extractor_args': extractor_args,
+    }
+
+    with yt_dlp.YoutubeDL(search_opts) as ydl_search:
         try:
-            # Check up to 50 search results
-            results = ydl.extract_info(f"ytsearch50:{search_query}", download=False)
+            results = ydl_search.extract_info(f"ytsearch50:{search_query}", download=False)
             if results and 'entries' in results:
-                for entry in results['entries']:
-                    if entry and entry.get('id') not in history:
-                        print(f"✅ Found viral video: {entry.get('title')} ({entry.get('view_count')} views)")
-                        ydl.download([entry['webpage_url']])
-                        return output_path, entry['id']
+                entries = [e for e in results['entries'] if e]
+                random.shuffle(entries)
+
+                for entry in entries:
+                    video_id = entry.get('id')
+                    video_url = entry.get('url') or f"https://www.youtube.com/watch?v={video_id}"
+
+                    if not video_id or video_id in history:
+                        continue
+
+                    with yt_dlp.YoutubeDL(dl_opts) as ydl_dl:
+                        try:
+                            info = ydl_dl.extract_info(video_url, download=True)
+                            if info:
+                                view_count = info.get('view_count', 0) or 0
+
+                                if view_count and view_count < 30000:
+                                    print(f"⏭️ Skipping {video_id}: views under target ({view_count})")
+                                    if os.path.exists(output_path):
+                                        os.remove(output_path)
+                                    continue
+
+                                print(f"✅ Downloaded video: {info.get('title')} ({view_count} views)")
+                                return output_path, video_id
+                        except Exception as e:
+                            print(f"⚠️ Could not download {video_id}: {e}")
+                            if os.path.exists(output_path):
+                                os.remove(output_path)
+                            continue
         except Exception as e:
-            print(f"⚠️ Search error encountered: {e}")
+            print(f"⚠️ Search error: {e}")
 
     print("❌ No new viral videos found right now.")
     return None, None
