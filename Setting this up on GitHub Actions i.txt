@@ -1,0 +1,40 @@
+Setting this up on GitHub Actions is the absolute best way to run your bot 24/7 for free without touching your PC!Because GitHub Actions runs in a cloud environment (Linux servers), we need to securely pass your YouTube authentication tokens via GitHub Secrets so it can log into your channel safely without needing a browser window.Follow these 4 simple steps to get it running:Step 1: Get Your Token Content ReadySince you already ran the script successfully on your PC, you will find two files in your project folder:client_secret.jsontoken.jsonKeep these files open or handy, as you will copy their text contents into GitHub.Step 2: Add Secrets to Your GitHub RepositoryPush your project code (including main.py and your music/ folder) to a Private GitHub Repository.Go to your repository on GitHub, click on Settings (top menu).In the left sidebar, expand Secrets and variables and click Actions.Click New repository secret and add these two secrets:Secret 1:Name: CLIENT_SECRET_JSONValue: Paste the entire text content of your local client_secret.json file.Secret 2:Name: TOKEN_JSONValue: Paste the entire text content of your local token.json file.Step 3: Create the GitHub Actions Workflow FileIn your project folder on your PC, create a folder structure named .github/workflows/, and inside it, create a file named upload_shorts.yml:YAMLname: Marwari Shorts Auto Upload
+
+on:
+  schedule:
+    - cron: '0 */4 * * *' # Runs automatically every 4 hours
+  workflow_dispatch: # Allows you to test it manually anytime from GitHub website
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v3
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install FFmpeg (Required for Video Processing)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install yt-dlp moviepy pydub openai-whisper google-api-python-client google-auth-oauthlib google-auth-httplib2 "Pillow<10.0.0"
+
+      - name: Inject Credentials from GitHub Secrets
+        run: |
+          echo '${{ secrets.CLIENT_SECRET_JSON }}' > client_secret.json
+          echo '${{ secrets.TOKEN_JSON }}' > token.json
+
+      - name: Run Marwari Shorts Bot
+        run: python main.py
+Step 4: Push and Test!Commit and push this new workflow file to your GitHub repository:Bashgit add .
+git commit -m "Add GitHub Actions 4-hour automation workflow"
+git push origin main
+How to Verify It Works:Go to your GitHub repository page.Click on the Actions tab at the top.You will see your workflow listed. You can click Run workflow on the right side to trigger a test run immediately without waiting 4 hours!
