@@ -84,17 +84,71 @@ def mark_as_uploaded(video_id):
     with open(HISTORY_FILE, "w") as f:
         json.dump(history, f)
 
-def download_viral_marwari_video(output_path="raw_marwari.mp4"):
-    """Downloads a viral video using standard yt-dlp format selection with cookies."""
-    history = get_uploaded_videos()
+def download_video_with_cobalt(video_url, output_path="raw_marwari.mp4"):
+    """
+    Downloads a YouTube video using Cobalt API instances to bypass GitHub Actions IP blocks.
+    Tries multiple instances if one is rate-limited or down.
+    """
+    cobalt_instances = [
+        "https://api.cobalt.tools",
+        "https://cobalt.api.scruffal.com",
+        "https://co.wuk.sh",
+        "https://cobalt-api.kwiatek.xyz",
+    ]
 
-    # Load cookies from env var or local file
-    cookie_file = "cookies.txt"
-    if os.environ.get("YOUTUBE_COOKIES"):
-        with open("cookies.txt", "w", encoding="utf-8") as f:
-            f.write(os.environ["YOUTUBE_COOKIES"])
-    elif not os.path.exists(cookie_file):
-        cookie_file = None
+    payload = {
+        "url": video_url,
+        "videoQuality": "1080",
+        "downloadMode": "auto"
+    }
+
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    }
+
+    for instance in cobalt_instances:
+        try:
+            api_endpoint = instance.rstrip('/') + '/'
+            print(f"🌐 Requesting download stream from Cobalt instance: {instance}...")
+            res = requests.post(api_endpoint, json=payload, headers=headers, timeout=15)
+            
+            if res.status_code != 200:
+                print(f"⚠️ Instance {instance} returned status code {res.status_code}")
+                continue
+
+            data = res.json()
+            download_url = None
+
+            if "url" in data:
+                download_url = data["url"]
+            elif "picker" in data and len(data["picker"]) > 0:
+                download_url = data["picker"][0].get("url")
+
+            if download_url:
+                print(f"📥 Downloading video file stream...")
+                video_res = requests.get(download_url, stream=True, timeout=60)
+                if video_res.status_code == 200:
+                    with open(output_path, "wb") as f:
+                        for chunk in video_res.iter_content(chunk_size=1024 * 1024):
+                            if chunk:
+                                f.write(chunk)
+                    print(f"✅ Video saved successfully to {output_path}")
+                    return True
+                else:
+                    print(f"⚠️ Failed to stream video from Cobalt URL, status: {video_res.status_code}")
+            else:
+                print(f"⚠️ No direct download URL in Cobalt response: {data}")
+
+        except Exception as e:
+            print(f"⚠️ Error reaching Cobalt instance {instance}: {e}")
+
+    return False
+
+def download_viral_marwari_video(output_path="raw_marwari.mp4"):
+    """Searches for viral videos and downloads them via Cobalt API."""
+    history = get_uploaded_videos()
 
     search_queries = [
         "Marwari funny comedy shorts",
@@ -109,16 +163,6 @@ def download_viral_marwari_video(output_path="raw_marwari.mp4"):
     search_opts = {
         'extract_flat': 'in_playlist',
         'skip_download': True,
-        'quiet': True,
-        'ignoreerrors': True,
-        'cookiefile': cookie_file,
-    }
-
-    dl_opts = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-        'outtmpl': output_path,
-        'cookiefile': cookie_file,
-        'noplaylist': True,
         'quiet': True,
         'ignoreerrors': True,
     }
@@ -137,30 +181,24 @@ def download_viral_marwari_video(output_path="raw_marwari.mp4"):
                     if not video_id or video_id in history:
                         continue
 
-                    with yt_dlp.YoutubeDL(dl_opts) as ydl_dl:
-                        try:
-                            info = ydl_dl.extract_info(video_url, download=True)
-                            if info:
-                                view_count = info.get('view_count', 0) or 0
+                    view_count = entry.get('view_count') or 0
+                    if view_count and view_count < 30000:
+                        print(f"⏭️ Skipping {video_id}: views under target ({view_count})")
+                        continue
 
-                                if view_count and view_count < 30000:
-                                    print(f"⏭️ Skipping {video_id}: views under target ({view_count})")
-                                    if os.path.exists(output_path):
-                                        os.remove(output_path)
-                                    continue
+                    print(f"🎬 Found candidate video: {video_id}. Starting Cobalt download...")
+                    if download_video_with_cobalt(video_url, output_path):
+                        print(f"✅ Successfully downloaded video {video_id}")
+                        return output_path, video_id
+                    else:
+                        print(f"⚠️ Cobalt download failed for {video_id}, trying next entry...")
 
-                                print(f"✅ Downloaded video: {info.get('title')} ({view_count} views)")
-                                return output_path, video_id
-                        except Exception as e:
-                            print(f"⚠️ Could not download {video_id}: {e}")
-                            if os.path.exists(output_path):
-                                os.remove(output_path)
-                            continue
         except Exception as e:
             print(f"⚠️ Search error: {e}")
 
     print("❌ No new viral videos found right now.")
     return None, None
+
 def download_background_music(save_path="music/background.mp3"):
     """Downloads a clean, copyright-free background music track."""
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
@@ -242,7 +280,7 @@ def build_marwari_short(input_video_path="raw_marwari.mp4", music_path="music/ba
         output_path, 
         codec="libx264", 
         audio_codec="aac", 
-        bitrate="6000k",       
+        bitrate="6000k",        
         audio_bitrate="192k",  
         fps=30, 
         logger=None
