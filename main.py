@@ -172,10 +172,15 @@ def download_viral_marwari_video(output_path="raw_marwari.mp4"):
 
                     print(f"⚠️ Cobalt failed for {video_id}, falling back to direct yt-dlp...")
                     try:
+                        # ✅ UPDATED CONFIGURATION WITH COOKIES HERE
                         ydl_dl_opts = {
                             'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
                             'outtmpl': output_path,
-                            'quiet': True,
+                            'quiet': False,
+                            'overwrites': True,
+                            'cookiefile': 'cookies.txt', # Authenticats with YouTube
+                            'sleep_interval': 3,
+                            'max_sleep_interval': 8
                         }
                         with yt_dlp.YoutubeDL(ydl_dl_opts) as ydl_dl:
                             ydl_dl.download([video_url])
