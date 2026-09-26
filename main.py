@@ -6,7 +6,8 @@ import numpy as np
 import yt_dlp
 import requests
 from PIL import Image, ImageDraw, ImageFont
-from moviepy.editor import (
+# ✅ NEW (Works across MoviePy versions)
+from moviepy import (
     VideoFileClip,
     concatenate_videoclips,
     AudioFileClip,
