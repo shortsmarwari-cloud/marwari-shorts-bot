@@ -7,7 +7,7 @@ import yt_dlp
 import requests
 from PIL import Image, ImageDraw, ImageFont
 # ✅ NEW (Works across MoviePy versions)
-from moviepy import (
+from moviepy.editor import (
     VideoFileClip,
     concatenate_videoclips,
     AudioFileClip,
