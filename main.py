@@ -6,7 +6,7 @@ import numpy as np
 import yt_dlp
 import requests
 from PIL import Image, ImageDraw, ImageFont
-from moviepy import (
+from moviepy.editor import (
     VideoFileClip,
     concatenate_videoclips,
     AudioFileClip,
@@ -23,11 +23,11 @@ from googleapiclient.http import MediaFileUpload
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload", "https://www.googleapis.com/auth/youtube.readonly"]
 HISTORY_FILE = "upload_history.json"
-CHANNEL_WATERMARK = "@MarwariShorts" # Change this to your channel name!
+CHANNEL_WATERMARK = "@MarwariShorts"
 
-# --- PIL TEXT CREATION (NO IMAGEMAGICK REQUIRED) ---
+# --- PIL TEXT CREATION ---
 def create_text_banner_pil(text, font_size=50, text_color="yellow", bg_color=(0, 0, 0, 180), width=1080):
-    """Generates a text banner as a NumPy array using Pillow (bypasses ImageMagick)."""
+    """Generates a text banner as a NumPy array using Pillow."""
     try:
         font = ImageFont.truetype("arial.ttf", font_size)
     except IOError:
@@ -36,7 +36,6 @@ def create_text_banner_pil(text, font_size=50, text_color="yellow", bg_color=(0,
         except IOError:
             font = ImageFont.load_default()
 
-    # Create dummy canvas to measure text
     dummy_img = Image.new("RGBA", (1, 1))
     draw = ImageDraw.Draw(dummy_img)
     bbox = draw.textbbox((0, 0), text, font=font)
@@ -51,7 +50,6 @@ def create_text_banner_pil(text, font_size=50, text_color="yellow", bg_color=(0,
     img = Image.new("RGBA", (canvas_w, canvas_h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Draw centered background rectangle with rounded corners
     rect_x1 = (canvas_w - tw) / 2 - padding_x
     rect_y1 = padding_y / 2
     rect_x2 = (canvas_w + tw) / 2 + padding_x
@@ -59,7 +57,6 @@ def create_text_banner_pil(text, font_size=50, text_color="yellow", bg_color=(0,
 
     draw.rounded_rectangle([rect_x1, rect_y1, rect_x2, rect_y2], radius=12, fill=bg_color)
 
-    # Draw centered text
     text_x = (canvas_w - tw) / 2
     text_y = padding_y / 2
     draw.text((text_x, text_y), text, font=font, fill=text_color)
@@ -68,7 +65,6 @@ def create_text_banner_pil(text, font_size=50, text_color="yellow", bg_color=(0,
 
 # --- 1. HISTORY & VIRAL DOWNLOAD HELPERS ---
 def get_uploaded_videos():
-    """Reads the history file to prevent duplicate uploads."""
     if os.path.exists(HISTORY_FILE):
         with open(HISTORY_FILE, "r") as f:
             try:
@@ -78,28 +74,20 @@ def get_uploaded_videos():
     return []
 
 def mark_as_uploaded(video_id):
-    """Saves the video ID to history after a successful upload."""
     history = get_uploaded_videos()
     history.append(video_id)
     with open(HISTORY_FILE, "w") as f:
         json.dump(history, f)
 
 def download_video_with_cobalt(video_url, output_path="raw_marwari.mp4"):
-    """
-    Downloads a YouTube video using Cobalt API instances to bypass GitHub Actions IP blocks.
-    Tries multiple instances if one is rate-limited or down.
-    """
+    """Downloads a YouTube video using Cobalt API endpoint."""
     cobalt_instances = [
-        "https://api.cobalt.tools",
-        "https://cobalt.api.scruffal.com",
-        "https://co.wuk.sh",
-        "https://cobalt-api.kwiatek.xyz",
+        "https://api.cobalt.tools"
     ]
 
+    # Fixed: Modern Cobalt API expects simple JSON payload
     payload = {
-        "url": video_url,
-        "videoQuality": "1080",
-        "downloadMode": "auto"
+        "url": video_url
     }
 
     headers = {
@@ -110,24 +98,21 @@ def download_video_with_cobalt(video_url, output_path="raw_marwari.mp4"):
 
     for instance in cobalt_instances:
         try:
-            api_endpoint = instance.rstrip('/') + '/'
-            print(f"🌐 Requesting download stream from Cobalt instance: {instance}...")
-            res = requests.post(api_endpoint, json=payload, headers=headers, timeout=15)
+            print(f"🌐 Requesting download stream from Cobalt API: {instance}...")
+            res = requests.post(instance, json=payload, headers=headers, timeout=15)
             
             if res.status_code != 200:
-                print(f"⚠️ Instance {instance} returned status code {res.status_code}")
+                print(f"⚠️ Instance returned status code {res.status_code}: {res.text}")
                 continue
 
             data = res.json()
-            download_url = None
+            download_url = data.get("url")
 
-            if "url" in data:
-                download_url = data["url"]
-            elif "picker" in data and len(data["picker"]) > 0:
+            if not download_url and "picker" in data and len(data["picker"]) > 0:
                 download_url = data["picker"][0].get("url")
 
             if download_url:
-                print(f"📥 Downloading video file stream...")
+                print(f"📥 Downloading video stream...")
                 video_res = requests.get(download_url, stream=True, timeout=60)
                 if video_res.status_code == 200:
                     with open(output_path, "wb") as f:
@@ -136,18 +121,13 @@ def download_video_with_cobalt(video_url, output_path="raw_marwari.mp4"):
                                 f.write(chunk)
                     print(f"✅ Video saved successfully to {output_path}")
                     return True
-                else:
-                    print(f"⚠️ Failed to stream video from Cobalt URL, status: {video_res.status_code}")
-            else:
-                print(f"⚠️ No direct download URL in Cobalt response: {data}")
-
         except Exception as e:
-            print(f"⚠️ Error reaching Cobalt instance {instance}: {e}")
+            print(f"⚠️ Cobalt instance error: {e}")
 
     return False
 
 def download_viral_marwari_video(output_path="raw_marwari.mp4"):
-    """Searches for viral videos and downloads them via Cobalt API."""
+    """Searches for viral videos, attempting Cobalt download first and falling back to yt-dlp."""
     history = get_uploaded_videos()
 
     search_queries = [
@@ -158,7 +138,7 @@ def download_viral_marwari_video(output_path="raw_marwari.mp4"):
         "Rajasthani funny jokes shorts"
     ]
     search_query = random.choice(search_queries)
-    print(f"🔍 Searching for viral videos (>30k views) for: '{search_query}'...")
+    print(f"🔍 Searching viral videos for: '{search_query}'...")
 
     search_opts = {
         'extract_flat': 'in_playlist',
@@ -183,15 +163,26 @@ def download_viral_marwari_video(output_path="raw_marwari.mp4"):
 
                     view_count = entry.get('view_count') or 0
                     if view_count and view_count < 30000:
-                        print(f"⏭️ Skipping {video_id}: views under target ({view_count})")
                         continue
 
-                    print(f"🎬 Found candidate video: {video_id}. Starting Cobalt download...")
+                    print(f"🎬 Found candidate video: {video_id}. Attempting Cobalt API...")
                     if download_video_with_cobalt(video_url, output_path):
-                        print(f"✅ Successfully downloaded video {video_id}")
                         return output_path, video_id
-                    else:
-                        print(f"⚠️ Cobalt download failed for {video_id}, trying next entry...")
+
+                    print(f"⚠️ Cobalt failed for {video_id}, falling back to direct yt-dlp...")
+                    try:
+                        ydl_dl_opts = {
+                            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                            'outtmpl': output_path,
+                            'quiet': True,
+                        }
+                        with yt_dlp.YoutubeDL(ydl_dl_opts) as ydl_dl:
+                            ydl_dl.download([video_url])
+                        if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                            print(f"✅ Direct yt-dlp download succeeded.")
+                            return output_path, video_id
+                    except Exception as dl_err:
+                        print(f"⚠️ Direct yt-dlp download failed: {dl_err}")
 
         except Exception as e:
             print(f"⚠️ Search error: {e}")
@@ -200,7 +191,6 @@ def download_viral_marwari_video(output_path="raw_marwari.mp4"):
     return None, None
 
 def download_background_music(save_path="music/background.mp3"):
-    """Downloads a clean, copyright-free background music track."""
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     url = "https://incompetech.com/music/royalty-free/mp3-royaltyfree/Scheming%20Weasel%20faster.mp3"
     if not os.path.exists(save_path):
@@ -213,9 +203,8 @@ def download_background_music(save_path="music/background.mp3"):
                         f.write(chunk)
     return save_path
 
-# --- 2. VIDEO EDITING & HD QUALITY ENCODING ---
+# --- 2. VIDEO EDITING & ENCODING ---
 def find_loudest_moment(audio_path, duration=3):
-    """Identifies peak audio to extract a 3-second hook."""
     audio = AudioSegment.from_file(audio_path)
     chunk_ms = 500
     loudness = [audio[i:i+chunk_ms].rms for i in range(0, len(audio)-chunk_ms, chunk_ms)]
@@ -226,29 +215,24 @@ def find_loudest_moment(audio_path, duration=3):
     return start_time, start_time + duration
 
 def build_marwari_short(input_video_path="raw_marwari.mp4", music_path="music/background.mp3", output_path="final_short.mp4"):
-    """Cuts 3-second hook, adds text overlays, crops to 9:16, exports in HD."""
-    print("🎬 Processing video: Building 3-sec hook, adding text overlays, formatting HD...")
+    print("🎬 Processing video: Building hook & cropping to 9:16...")
     video = VideoFileClip(input_video_path)
 
-    # 1. Extract temporary audio to find the funniest/loudest moment
     temp_audio = "temp.wav"
     video.audio.write_audiofile(temp_audio, logger=None)
 
     hook_start, hook_end = find_loudest_moment(temp_audio, duration=3)
     hook_clip = video.subclip(hook_start, min(hook_end, video.duration))
 
-    # 2. Add "Wait for it..." Text to the Hook via Pillow
     hook_img = create_text_banner_pil("Wait for it... 😂", font_size=55, text_color="yellow", bg_color=(0, 0, 0, 180), width=1080)
     hook_text = ImageClip(hook_img).set_position(('center', 120)).set_duration(hook_clip.duration)
     hook_clip = CompositeVideoClip([hook_clip, hook_text])
 
-    # 3. Get the main video and add a Watermark via Pillow
     main_clip = video.subclip(max(0, hook_start - 2), min(video.duration, hook_start + 30))
     wm_img = create_text_banner_pil(CHANNEL_WATERMARK, font_size=35, text_color="white", bg_color=(0, 0, 0, 120), width=1080)
     wm_text = ImageClip(wm_img).set_position(('center', 'bottom')).set_duration(main_clip.duration)
     main_clip = CompositeVideoClip([main_clip, wm_text])
 
-    # 4. Stitch together and Crop to 9:16 vertical
     assembled = concatenate_videoclips([hook_clip, main_clip])
 
     w, h = assembled.size
@@ -266,7 +250,6 @@ def build_marwari_short(input_video_path="raw_marwari.mp4", music_path="music/ba
 
     final_video = cropped.resize((1080, 1920))
 
-    # 5. Layer background music
     if os.path.exists(music_path):
         try:
             bg_music = AudioFileClip(music_path).volumex(0.10).subclip(0, final_video.duration)
@@ -275,7 +258,6 @@ def build_marwari_short(input_video_path="raw_marwari.mp4", music_path="music/ba
         except Exception as e:
             print(f"⚠️ Could not blend background music: {e}")
 
-    # 6. Export HD
     final_video.write_videofile(
         output_path, 
         codec="libx264", 
@@ -298,13 +280,12 @@ def build_marwari_short(input_video_path="raw_marwari.mp4", music_path="music/ba
 def get_youtube_service():
     creds = None
 
-    # Load from environment variable if running in GitHub Actions
     if os.environ.get("TOKEN_JSON"):
         try:
             token_data = json.loads(os.environ["TOKEN_JSON"])
             creds = Credentials.from_authorized_user_info(token_data, SCOPES)
         except Exception as e:
-            print(f"⚠️ Failed to parse TOKEN_JSON from environment: {e}")
+            print(f"⚠️ Failed to parse TOKEN_JSON: {e}")
 
     if not creds and os.path.exists("token.json"):
         creds = Credentials.from_authorized_user_file("token.json", SCOPES)
@@ -313,6 +294,8 @@ def get_youtube_service():
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
+            if not os.path.exists("client_secret.json"):
+                raise FileNotFoundError("client_secret.json missing and no valid token found.")
             flow = InstalledAppFlow.from_client_secrets_file("client_secret.json", SCOPES)
             creds = flow.run_local_server(host="127.0.0.1", port=8080)
         with open("token.json", "w") as token:
@@ -363,21 +346,17 @@ def safe_upload_and_check(video_file="final_short.mp4", title="Marwari Desi Come
     return True
 
 def run_pipeline():
-    # 1. Download video & save source ID
     raw_video, source_video_id = download_viral_marwari_video()
 
     if not raw_video:
         print("Pipeline stopped: No suitable videos found.")
         return
 
-    # 2. Build the video
     music_file = download_background_music()
     short_file = build_marwari_short(raw_video, music_file)
 
-    # 3. Upload & Check
     success = safe_upload_and_check(short_file)
 
-    # 4. Save to history so we NEVER upload it again
     if success and source_video_id:
         mark_as_uploaded(source_video_id)
         print("✅ Added video to history.")
